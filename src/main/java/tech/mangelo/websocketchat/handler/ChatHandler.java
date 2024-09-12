@@ -10,7 +10,6 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-// Essa classe utiliza de TextWebSocketHandler pois esse handler é um handler mais apropriado para processamentos de textos. - @Miguel
 public class ChatHandler extends TextWebSocketHandler {
 
     private final Queue<WebSocketSession> usersQueue = new ConcurrentLinkedQueue<>();
@@ -23,12 +22,14 @@ public class ChatHandler extends TextWebSocketHandler {
     }
 
     private void matchUsers() throws Exception {
-        if (usersQueue.size() > 1) {
+        if (usersQueue.size() >= 2) {
             WebSocketSession userSessionOne = usersQueue.poll();
             WebSocketSession userSessionTwo = usersQueue.poll();
             if (userSessionOne != null && userSessionTwo != null) {
-                userSessionOne.sendMessage(new TextMessage("Connection paired with someone."));
-                userSessionTwo.sendMessage(new TextMessage("Connection paired with someone."));
+                pairedUsers.put(userSessionOne, userSessionTwo);
+                pairedUsers.put(userSessionTwo, userSessionOne);
+                userSessionOne.sendMessage(new TextMessage("Connected with a random user."));
+                userSessionTwo.sendMessage(new TextMessage("Connected with a random user."));
             }
         }
     }
@@ -39,9 +40,8 @@ public class ChatHandler extends TextWebSocketHandler {
         if (pairedSession != null && pairedSession.isOpen()) {
             pairedSession.sendMessage(new TextMessage(message.getPayload()));
         } else {
-            session.sendMessage(new TextMessage("The person you was talking has disconnected."));
+            session.sendMessage(new TextMessage("The person you were talking to has disconnected."));
         }
-
     }
 
     @Override
@@ -49,12 +49,10 @@ public class ChatHandler extends TextWebSocketHandler {
         WebSocketSession pairedSession = pairedUsers.remove(session);
         if (pairedSession != null) {
             pairedUsers.remove(pairedSession);
-            if (pairedSession.isOpen()){
-                session.sendMessage(new TextMessage("The person you were talking has disconnected."));
+            if (pairedSession.isOpen()) {
+                pairedSession.sendMessage(new TextMessage("The person you were talking to has disconnected."));
             }
         }
         usersQueue.remove(session);
     }
-
-
 }
