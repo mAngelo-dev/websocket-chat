@@ -10,14 +10,28 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-//A conexão não é de fato aleatoria e sim por ordem de chegada já que estamos puxando sempre as primeiras duas sessões da fila.
-
+/**
+ * Handler para gerenciar conexões WebSocket e chats entre usuários.
+ * A conexão é feita por ordem de chegada, puxando sempre as duas primeiras sessões da fila.
+ *
+ * @author @Miguel
+ * @author @Claude
+ */
 public class ChatHandler extends TextWebSocketHandler {
 
     private final Queue<WebSocketSession> usersQueue = new ConcurrentLinkedQueue<>();
     private final Map<WebSocketSession, WebSocketSession> pairedUsers = new ConcurrentHashMap<>();
-    private Map<WebSocketSession, WebSocketSession> previousConnection = new ConcurrentHashMap<>();
+    private final Map<WebSocketSession, WebSocketSession> previousConnection = new ConcurrentHashMap<>();
 
+    /**
+     * Reconecta dois usuários que se desconectaram e estavam em uma conversa.
+     *
+     * @param userSessionOne A primeira sessão de usuário.
+     * @param userSessionTwo A segunda sessão de usuário.
+     * @throws Exception Se ocorrer um erro ao enviar as mensagens.
+     *
+     * @author @Miguel
+     */
     private void reconnectUsers(WebSocketSession userSessionOne, WebSocketSession userSessionTwo) throws Exception {
         pairedUsers.put(userSessionOne, userSessionTwo);
         pairedUsers.put(userSessionTwo, userSessionOne);
@@ -26,12 +40,20 @@ public class ChatHandler extends TextWebSocketHandler {
         userSessionTwo.sendMessage(new TextMessage("Your previous chat partner has reconnected!"));
     }
 
+    /**
+     * Após a conexão ser estabelecida, tenta reconectar com um parceiro anterior ou adiciona à fila para pareamento.
+     *
+     * @param session A sessão do WebSocket que foi estabelecida.
+     * @throws Exception Se ocorrer um erro ao enviar as mensagens ou ao parear usuários.
+     *
+     * @author @Miguel
+     */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         WebSocketSession previousPartner = getPreviousPartner(session);
         if (previousPartner != null && previousPartner.isOpen()) {
             reconnectUsers(session, previousPartner);
-//            Remove sessões já conectadas devido a reconexão das duas
+            // Limpa a conexão anterior após a reconexão bem-sucedida
             previousConnection.remove(session);
             previousConnection.remove(previousPartner);
         } else {
@@ -40,6 +62,14 @@ public class ChatHandler extends TextWebSocketHandler {
         }
     }
 
+    /**
+     * Obtém o parceiro anterior de um usuário, se existir.
+     *
+     * @param session A sessão do WebSocket para a qual procuramos o parceiro anterior.
+     * @return O parceiro anterior ou null se não existir.
+     *
+     * @author @Miguel
+     */
     private WebSocketSession getPreviousPartner(WebSocketSession session) {
         for (Map.Entry<WebSocketSession, WebSocketSession> entry : previousConnection.entrySet()) {
             if (entry.getKey().equals(session)) {
@@ -51,9 +81,16 @@ public class ChatHandler extends TextWebSocketHandler {
         return null;
     }
 
+    /**
+     * Faz o pareamento de dois usuários da fila.
+     *
+     * @throws Exception Se ocorrer um erro ao enviar as mensagens.
+     *
+     * @author @Miguel
+     */
     private void matchUsers() throws Exception {
         if (usersQueue.size() >= 2) {
-//            Poll é um metodo para regatar o primeiro da fila
+            // Poll é um método para resgatar o primeiro da fila
             WebSocketSession userSessionOne = usersQueue.poll();
             WebSocketSession userSessionTwo = usersQueue.poll();
             if (userSessionOne != null && userSessionTwo != null) {
@@ -65,31 +102,48 @@ public class ChatHandler extends TextWebSocketHandler {
         }
     }
 
+    /**
+     * Manipula a mensagem de texto recebida de um usuário e a encaminha para o usuário pareado.
+     *
+     * @param session A sessão do WebSocket do usuário que enviou a mensagem.
+     * @param message A mensagem de texto recebida.
+     * @throws Exception Se ocorrer um erro ao enviar a mensagem.
+     *
+     * @author @Miguel
+     */
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         WebSocketSession pairedSession = pairedUsers.get(session);
         if (pairedSession != null && pairedSession.isOpen()) {
             pairedSession.sendMessage(new TextMessage(message.getPayload()));
         } else {
-//            Aqui a sessão é encerrada corretamente.
-            session.sendMessage(new TextMessage("Your partner has disconnected, closing sessions."));
-            session.close(CloseStatus.NORMAL);
+            session.sendMessage(new TextMessage("The person you were talking to has disconnected."));
         }
     }
 
+    /**
+     * Após a conexão ser fechada, remove o usuário da fila e do pareamento e tenta reestabelecer a conexão com o parceiro.
+     *
+     * @param session A sessão do WebSocket que foi fechada.
+     * @param status O status de fechamento da conexão.
+     * @throws Exception Se ocorrer um erro ao enviar a mensagem.
+     *
+     * @author @Miguel
+     */
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         WebSocketSession pairedSession = pairedUsers.remove(session);
         if (pairedSession != null) {
             pairedUsers.remove(pairedSession);
-//            Aqui salva o pair de sessão antiga, para caso um dos dois saiam, eles serão reconectados novamente.
-//            Por algum motivo quando tento a reconexão essa função não restaura a sessão, talvez porque os dados da requisição mudem?
             previousConnection.put(session, pairedSession);
             if (pairedSession.isOpen()) {
                 pairedSession.sendMessage(new TextMessage("The person you were talking to has disconnected."));
-                session.close(CloseStatus.NORMAL);
+                // Fechar a sessão pareada se necessário
+                pairedSession.close(CloseStatus.NORMAL);
             }
         }
         usersQueue.remove(session);
+        // Fechar a sessão atual
+        session.close(CloseStatus.NORMAL);
     }
 }
