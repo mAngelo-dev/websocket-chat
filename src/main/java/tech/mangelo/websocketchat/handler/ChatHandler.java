@@ -1,5 +1,6 @@
 package tech.mangelo.websocketchat.handler;
 
+import org.springframework.lang.NonNull;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -49,7 +50,7 @@ public class ChatHandler extends TextWebSocketHandler {
      * @author @Miguel
      */
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+    public void afterConnectionEstablished(@NonNull WebSocketSession session) throws Exception {
         WebSocketSession previousPartner = getPreviousPartner(session);
         if (previousPartner != null && previousPartner.isOpen()) {
             reconnectUsers(session, previousPartner);
@@ -112,7 +113,7 @@ public class ChatHandler extends TextWebSocketHandler {
      * @author @Miguel
      */
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    protected void handleTextMessage(@NonNull WebSocketSession session,@NonNull TextMessage message) throws Exception {
         WebSocketSession pairedSession = pairedUsers.get(session);
         if (pairedSession != null && pairedSession.isOpen()) {
             pairedSession.sendMessage(new TextMessage(message.getPayload()));
@@ -131,7 +132,7 @@ public class ChatHandler extends TextWebSocketHandler {
      * @author @Miguel
      */
     @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+    public void afterConnectionClosed(@NonNull WebSocketSession session,@NonNull CloseStatus status) throws Exception {
         WebSocketSession pairedSession = pairedUsers.remove(session);
         if (pairedSession != null) {
             pairedUsers.remove(pairedSession);
